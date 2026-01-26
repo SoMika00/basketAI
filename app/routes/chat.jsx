@@ -1,12 +1,12 @@
 /**
  * Chat API Route
- * Handles chat interactions with Claude API and tools
+ * Handles chat interactions with LLM and tools
  */
 import MCPClient from "../mcp-client";
 import { saveMessage, getConversationHistory, storeCustomerAccountUrls, getCustomerAccountUrls as getCustomerAccountUrlsFromDb } from "../db.server";
 import AppConfig from "../services/config.server";
 import { createSseStream } from "../services/streaming.server";
-import { createClaudeService } from "../services/claude.server";
+import { createLlmService } from "../services/llm.server";
 import { createToolService } from "../services/tool.server";
 
 
@@ -120,8 +120,13 @@ async function handleChatSession({
   stream
 }) {
   // Initialize services
-  const claudeService = createClaudeService();
+  const llmService = createLlmService();
   const toolService = createToolService();
+  const maxExchanges = Number(process.env.MAX_CHAT_EXCHANGES || 5);
+  const maxLlmTurns = Number(process.env.MAX_LLM_TURNS || 3);
+  const maxToolCalls = Number(process.env.MAX_TOOL_CALLS || 8);
+  let llmTurns = 0;
+  let toolCalls = 0;
 
   // Initialize MCP client
   const shopId = request.headers.get("X-Shopify-Shop-Id");
@@ -162,8 +167,36 @@ async function handleChatSession({
     // Fetch all messages from the database for this conversation
     const dbMessages = await getConversationHistory(conversationId);
 
-    // Format messages for Claude API
-    conversationHistory = dbMessages.map(dbMessage => {
+    const isToolResultOnlyContent = (raw) => {
+      if (typeof raw !== 'string') return false;
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) || parsed.length === 0) return false;
+        return parsed.every((b) => b && b.type === 'tool_result');
+      } catch (e) {
+        return false;
+      }
+    };
+
+    const limitedDbMessages = (() => {
+      if (!Number.isFinite(maxExchanges) || maxExchanges <= 0) return dbMessages;
+      const selected = [];
+      let exchanges = 0;
+
+      for (let i = dbMessages.length - 1; i >= 0; i--) {
+        const m = dbMessages[i];
+        selected.push(m);
+        if (m.role === 'user' && !isToolResultOnlyContent(m.content)) {
+          exchanges += 1;
+          if (exchanges >= maxExchanges) break;
+        }
+      }
+
+      selected.reverse();
+      return selected;
+    })();
+
+    conversationHistory = limitedDbMessages.map(dbMessage => {
       let content;
       try {
         content = JSON.parse(dbMessage.content);
@@ -180,7 +213,14 @@ async function handleChatSession({
     let finalMessage = { role: 'user', content: userMessage };
 
     while (finalMessage.stop_reason !== "end_turn") {
-      finalMessage = await claudeService.streamConversation(
+      llmTurns += 1;
+      if (llmTurns > maxLlmTurns) {
+        const error = new Error('Too many LLM turns for a single request');
+        error.status = 429;
+        throw error;
+      }
+
+      finalMessage = await llmService.streamConversation(
         {
           messages: conversationHistory,
           promptType,
@@ -213,6 +253,13 @@ async function handleChatSession({
 
           // Handle tool use requests
           onToolUse: async (content) => {
+            toolCalls += 1;
+            if (toolCalls > maxToolCalls) {
+              const error = new Error('Too many tool calls for a single request');
+              error.status = 429;
+              throw error;
+            }
+
             const toolName = content.name;
             const toolArgs = content.input;
             const toolUseId = content.id;
