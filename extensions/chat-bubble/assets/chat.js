@@ -228,13 +228,39 @@
      */
     Message: {
       /**
+       * Get or create a shop-specific conversation ID persisted in localStorage
+       * @returns {string} The conversation ID
+       */
+      getConversationId: function() {
+        const shopId = window.shopId || 'default';
+        const storageKey = `shopAiConversationId_${shopId}`;
+        let conversationId = localStorage.getItem(storageKey);
+
+        if (!conversationId) {
+          conversationId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+          localStorage.setItem(storageKey, conversationId);
+        }
+
+        return conversationId;
+      },
+
+      /**
+       * Clear the persisted conversation ID (for future reset functionality)
+       */
+      clearConversationId: function() {
+        const shopId = window.shopId || 'default';
+        const storageKey = `shopAiConversationId_${shopId}`;
+        localStorage.removeItem(storageKey);
+      },
+
+      /**
        * Send a message to the API
        * @param {HTMLInputElement} chatInput - The input element
        * @param {HTMLElement} messagesContainer - The messages container
        */
       send: async function(chatInput, messagesContainer) {
         const userMessage = chatInput.value.trim();
-        const conversationId = sessionStorage.getItem('shopAiConversationId');
+        const conversationId = this.getConversationId();
 
         // Add user message to chat
         this.add(userMessage, 'user', messagesContainer);
@@ -343,561 +369,220 @@
           }
         });
 
-        // Assemble the complete element
         toolUseElement.appendChild(headerElement);
         toolUseElement.appendChild(argsElement);
-
         messagesContainer.appendChild(toolUseElement);
         ShopAIChat.UI.scrollToBottom();
       }
     },
 
     /**
-     * Text formatting and markdown handling
-     */
-    Formatting: {
-      /**
-       * Format message content with markdown and links
-       * @param {HTMLElement} element - The element to format
-       */
-      formatMessageContent: function(element) {
-        if (!element || !element.dataset.rawText) return;
-
-        const rawText = element.dataset.rawText;
-
-        // Process the text with various Markdown features
-        let processedText = rawText;
-
-        // Process Markdown links
-        const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-        processedText = processedText.replace(markdownLinkRegex, (match, text, url) => {
-          // Check if it's an auth URL
-          if (url.includes('shopify.com/authentication') &&
-             (url.includes('oauth/authorize') || url.includes('authentication'))) {
-            // Store the auth URL in a global variable for later use - this avoids issues with onclick handlers
-            window.shopAuthUrl = url;
-            // Just return normal link that will be handled by the document click handler
-            return '<a href="#auth" class="shop-auth-trigger">' + text + '</a>';
-          }
-          // If it's a checkout link, replace the text
-          else if (url.includes('/cart') || url.includes('checkout')) {
-            return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">click here to proceed to checkout</a>';
-          } else {
-            // For normal links, preserve the original text
-            return '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
-          }
-        });
-
-        // Convert text to HTML with proper list handling
-        processedText = this.convertMarkdownToHtml(processedText);
-
-        // Apply the formatted HTML
-        element.innerHTML = processedText;
-      },
-
-      /**
-       * Convert Markdown text to HTML with list support
-       * @param {string} text - Markdown text to convert
-       * @returns {string} HTML content
-       */
-      convertMarkdownToHtml: function(text) {
-        text = text.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
-        const lines = text.split('\n');
-        let currentList = null;
-        let listItems = [];
-        let htmlContent = '';
-        let startNumber = 1;
-
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          const unorderedMatch = line.match(/^\s*([-*])\s+(.*)/);
-          const orderedMatch = line.match(/^\s*(\d+)[\.)]\s+(.*)/);
-
-          if (unorderedMatch) {
-            if (currentList !== 'ul') {
-              if (currentList === 'ol') {
-                htmlContent += `<ol start="${startNumber}">` + listItems.join('') + '</ol>';
-                listItems = [];
-              }
-              currentList = 'ul';
-            }
-            listItems.push('<li>' + unorderedMatch[2] + '</li>');
-          } else if (orderedMatch) {
-            if (currentList !== 'ol') {
-              if (currentList === 'ul') {
-                htmlContent += '<ul>' + listItems.join('') + '</ul>';
-                listItems = [];
-              }
-              currentList = 'ol';
-              startNumber = parseInt(orderedMatch[1], 10);
-            }
-            listItems.push('<li>' + orderedMatch[2] + '</li>');
-          } else {
-            if (currentList) {
-              htmlContent += currentList === 'ul'
-                ? '<ul>' + listItems.join('') + '</ul>'
-                : `<ol start="${startNumber}">` + listItems.join('') + '</ol>';
-              listItems = [];
-              currentList = null;
-            }
-
-            if (line.trim() === '') {
-              htmlContent += '<br>';
-            } else {
-              htmlContent += '<p>' + line + '</p>';
-            }
-          }
-        }
-
-        if (currentList) {
-          htmlContent += currentList === 'ul'
-            ? '<ul>' + listItems.join('') + '</ul>'
-            : `<ol start="${startNumber}">` + listItems.join('') + '</ol>';
-        }
-
-        htmlContent = htmlContent.replace(/<\/p><p>/g, '</p>\n<p>');
-        return htmlContent;
-      }
-    },
-
-    /**
-     * API communication and data handling
+     * API communication functionality
      */
     API: {
       /**
-       * Stream a response from the API
-       * @param {string} userMessage - User's message text
-       * @param {string} conversationId - Conversation ID for context
+       * Stream a response from the chat API
+       * @param {string} message - The user message
+       * @param {string} conversationId - The conversation ID
        * @param {HTMLElement} messagesContainer - The messages container
        */
-      streamResponse: async function(userMessage, conversationId, messagesContainer) {
-        let currentMessageElement = null;
+      streamResponse: function(message, conversationId, messagesContainer) {
+        const shopDomain = window.location.origin;
+        const shopId = window.shopId;
 
-        try {
-          const promptType = window.shopChatConfig?.promptType || "standardAssistant";
-          const requestBody = JSON.stringify({
-            message: userMessage,
+        // Prepare request headers
+        const headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+          'X-Shopify-Shop-Id': shopId
+        };
+
+        // Build URL with conversation_id for history if needed, but for chat use body
+        fetch(`${shopDomain}/chat`, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            message: message,
             conversation_id: conversationId,
-            prompt_type: promptType
-          });
-
-          const streamUrl = 'https://localhost:3458/chat';
-          const shopId = window.shopId;
-
-          const response = await fetch(streamUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'text/event-stream',
-              'X-Shopify-Shop-Id': shopId
-            },
-            body: requestBody
-          });
+            prompt_type: window.shopChatConfig?.promptType || 'standardAssistant'
+          })
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
 
-          // Create initial message element
-          let messageElement = document.createElement('div');
-          messageElement.classList.add('shop-ai-message', 'assistant');
-          messageElement.textContent = '';
-          messageElement.dataset.rawText = '';
-          messagesContainer.appendChild(messageElement);
-          currentMessageElement = messageElement;
+          function readStream() {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                ShopAIChat.UI.removeTypingIndicator();
+                return;
+              }
 
-          // Process the stream
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n\n');
+              buffer = lines.pop() || '';
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n\n');
-            buffer = lines.pop() || '';
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.substring(6));
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  this.handleStreamEvent(data, currentMessageElement, messagesContainer, userMessage,
-                    (newElement) => { currentMessageElement = newElement; });
-                } catch (e) {
-                  console.error('Error parsing event data:', e, line);
+                    if (data.type === 'id' && data.conversation_id) {
+                      // Server may return ID, ensure we persist it (already done client-side)
+                      const shopId = window.shopId || 'default';
+                      const storageKey = `shopAiConversationId_${shopId}`;
+                      localStorage.setItem(storageKey, data.conversation_id);
+                    } else if (data.type === 'chunk') {
+                      // Handle streaming chunks - append to last assistant message or create new
+                      let lastMessage = messagesContainer.querySelector('.shop-ai-message.assistant:last-child');
+                      if (!lastMessage || lastMessage.classList.contains('complete')) {
+                        lastMessage = ShopAIChat.Message.add('', 'assistant', messagesContainer);
+                      }
+                      lastMessage.dataset.rawText = (lastMessage.dataset.rawText || '') + data.chunk;
+                      ShopAIChat.Formatting.formatMessageContent(lastMessage);
+                      ShopAIChat.UI.scrollToBottom();
+                    } else if (data.type === 'message_complete') {
+                      // Mark message as complete
+                      const lastMessage = messagesContainer.querySelector('.shop-ai-message.assistant:last-child');
+                      if (lastMessage) {
+                        lastMessage.classList.add('complete');
+                      }
+                    } else if (data.type === 'tool_use') {
+                      ShopAIChat.Message.addToolUse(data.tool_use_message, messagesContainer);
+                    } else if (data.type === 'new_message') {
+                      // Start a new assistant message for next content
+                    } else if (data.type === 'content_block_complete') {
+                      // Content block done
+                    } else if (data.type === 'end_turn') {
+                      // End of turn
+                    } else if (data.type === 'product_results') {
+                      ShopAIChat.UI.displayProductResults(data.products);
+                    } else if (data.type === 'auth_required') {
+                      // Handle auth required
+                      const authMsg = document.createElement('div');
+                      authMsg.classList.add('shop-ai-message', 'assistant');
+                      authMsg.innerHTML = 'Authentication required. Please <a href="#" class="shop-auth-trigger">authorize</a> to continue.';
+                      messagesContainer.appendChild(authMsg);
+                      ShopAIChat.UI.scrollToBottom();
+                    } else if (data.error) {
+                      ShopAIChat.UI.removeTypingIndicator();
+                      ShopAIChat.Message.add(`Error: ${data.error}`, 'assistant', messagesContainer);
+                    }
+                  } catch (e) {
+                    console.error('Error parsing SSE data:', e);
+                  }
                 }
               }
-            }
+
+              readStream();
+            }).catch(error => {
+              console.error('Stream read error:', error);
+              ShopAIChat.UI.removeTypingIndicator();
+            });
           }
-        } catch (error) {
-          console.error('Error in streaming:', error);
+
+          readStream();
+        })
+        .catch(error => {
+          console.error('Fetch error:', error);
           ShopAIChat.UI.removeTypingIndicator();
-          ShopAIChat.Message.add("Sorry, I couldn't process your request. Please try again later.",
-            'assistant', messagesContainer);
-        }
+          ShopAIChat.Message.add("Sorry, I couldn't process your request at the moment. Please try again later.", 'assistant', messagesContainer);
+        });
       },
 
       /**
-       * Handle stream events from the API
-       * @param {Object} data - Event data
-       * @param {HTMLElement} currentMessageElement - Current message element being updated
-       * @param {HTMLElement} messagesContainer - The messages container
-       * @param {string} userMessage - The original user message
-       * @param {Function} updateCurrentElement - Callback to update the current element reference
+       * Fetch conversation history
+       * @param {string} conversationId - The conversation ID
+       * @returns {Promise<Array>} Array of messages
        */
-      handleStreamEvent: function(data, currentMessageElement, messagesContainer, userMessage, updateCurrentElement) {
-        switch (data.type) {
-          case 'id':
-            if (data.conversation_id) {
-              sessionStorage.setItem('shopAiConversationId', data.conversation_id);
-            }
-            break;
+      fetchHistory: async function(conversationId) {
+        const shopDomain = window.location.origin;
+        const shopId = window.shopId;
 
-          case 'chunk':
-            ShopAIChat.UI.removeTypingIndicator();
-            currentMessageElement.dataset.rawText += data.chunk;
-            currentMessageElement.textContent = currentMessageElement.dataset.rawText;
-            ShopAIChat.UI.scrollToBottom();
-            break;
-
-          case 'message_complete':
-            ShopAIChat.UI.removeTypingIndicator();
-            ShopAIChat.Formatting.formatMessageContent(currentMessageElement);
-            ShopAIChat.UI.scrollToBottom();
-            break;
-
-          case 'end_turn':
-            ShopAIChat.UI.removeTypingIndicator();
-            break;
-
-          case 'error':
-            console.error('Stream error:', data.error);
-            ShopAIChat.UI.removeTypingIndicator();
-            currentMessageElement.textContent = "Sorry, I couldn't process your request. Please try again later.";
-            break;
-
-          case 'rate_limit_exceeded':
-            console.error('Rate limit exceeded:', data.error);
-            ShopAIChat.UI.removeTypingIndicator();
-            currentMessageElement.textContent = "Sorry, our servers are currently busy. Please try again later.";
-            break;
-
-          case 'auth_required':
-            // Save the last user message for resuming after authentication
-            sessionStorage.setItem('shopAiLastMessage', userMessage || '');
-            break;
-
-          case 'product_results':
-            ShopAIChat.UI.displayProductResults(data.products);
-            break;
-
-          case 'tool_use':
-            if (data.tool_use_message) {
-              ShopAIChat.Message.addToolUse(data.tool_use_message, messagesContainer);
-            }
-            break;
-
-          case 'new_message':
-            ShopAIChat.Formatting.formatMessageContent(currentMessageElement);
-            ShopAIChat.UI.showTypingIndicator();
-
-            // Create new message element for the next response
-            const newMessageElement = document.createElement('div');
-            newMessageElement.classList.add('shop-ai-message', 'assistant');
-            newMessageElement.textContent = '';
-            newMessageElement.dataset.rawText = '';
-            messagesContainer.appendChild(newMessageElement);
-
-            // Update the current element reference
-            updateCurrentElement(newMessageElement);
-            break;
-
-          case 'content_block_complete':
-            ShopAIChat.UI.showTypingIndicator();
-            break;
-        }
-      },
-
-      /**
-       * Fetch chat history from the server
-       * @param {string} conversationId - Conversation ID
-       * @param {HTMLElement} messagesContainer - The messages container
-       */
-      fetchChatHistory: async function(conversationId, messagesContainer) {
         try {
-          // Show a loading message
-          const loadingMessage = document.createElement('div');
-          loadingMessage.classList.add('shop-ai-message', 'assistant');
-          loadingMessage.textContent = "Loading conversation history...";
-          messagesContainer.appendChild(loadingMessage);
-
-          // Fetch history from the server
-          const historyUrl = `https://localhost:3458/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
-          console.log('Fetching history from:', historyUrl);
-
-          const response = await fetch(historyUrl, {
+          const response = await fetch(`${shopDomain}/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`, {
             method: 'GET',
             headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            },
-            mode: 'cors'
-          });
-
-          if (!response.ok) {
-            console.error('History fetch failed:', response.status, response.statusText);
-            throw new Error('Failed to fetch chat history: ' + response.status);
-          }
-
-          const data = await response.json();
-
-          // Remove loading message
-          messagesContainer.removeChild(loadingMessage);
-
-          // No messages, show welcome message
-          if (!data.messages || data.messages.length === 0) {
-            const welcomeMessage = window.shopChatConfig?.welcomeMessage || "👋 Hi there! How can I help you today?";
-            ShopAIChat.Message.add(welcomeMessage, 'assistant', messagesContainer);
-            return;
-          }
-
-          // Add messages to the UI - filter out tool results
-          data.messages.forEach(message => {
-            try {
-              const messageContents = JSON.parse(message.content);
-              for (const contentBlock of messageContents) {
-                if (contentBlock.type === 'text') {
-                  ShopAIChat.Message.add(contentBlock.text, message.role, messagesContainer);
-                }
-              }
-            } catch (e) {
-              ShopAIChat.Message.add(message.content, message.role, messagesContainer);
+              'Content-Type': 'application/json',
+              'X-Shopify-Shop-Id': shopId
             }
           });
 
-          // Scroll to bottom
-          ShopAIChat.UI.scrollToBottom();
-
-        } catch (error) {
-          console.error('Error fetching chat history:', error);
-
-          // Remove loading message if it exists
-          const loadingMessage = messagesContainer.querySelector('.shop-ai-message.assistant');
-          if (loadingMessage && loadingMessage.textContent === "Loading conversation history...") {
-            messagesContainer.removeChild(loadingMessage);
-          }
-
-          // Show error and welcome message
-          const welcomeMessage = window.shopChatConfig?.welcomeMessage || "👋 Hi there! How can I help you today?";
-          ShopAIChat.Message.add(welcomeMessage, 'assistant', messagesContainer);
-
-          // Clear the conversation ID since we couldn't fetch this conversation
-          sessionStorage.removeItem('shopAiConversationId');
-        }
-      }
-    },
-
-    /**
-     * Authentication-related functionality
-     */
-    Auth: {
-      /**
-       * Opens an authentication popup window
-       * @param {string|HTMLElement} authUrlOrElement - The auth URL or link element that was clicked
-       */
-      openAuthPopup: function(authUrlOrElement) {
-        let authUrl;
-        if (typeof authUrlOrElement === 'string') {
-          // If a string URL was passed directly
-          authUrl = authUrlOrElement;
-        } else {
-          // If an element was passed
-          authUrl = authUrlOrElement.getAttribute('data-auth-url');
-          if (!authUrl) {
-            console.error('No auth URL found in element');
-            return;
-          }
-        }
-
-        // Open the popup window centered in the screen
-        const width = 600;
-        const height = 700;
-        const left = (window.innerWidth - width) / 2 + window.screenX;
-        const top = (window.innerHeight - height) / 2 + window.screenY;
-
-        const popup = window.open(
-          authUrl,
-          'ShopifyAuth',
-          `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
-        );
-
-        // Focus the popup window
-        if (popup) {
-          popup.focus();
-        } else {
-          // If popup was blocked, show a message
-          alert('Please allow popups for this site to authenticate with Shopify.');
-        }
-
-        // Start polling for token availability
-        const conversationId = sessionStorage.getItem('shopAiConversationId');
-        if (conversationId) {
-          const messagesContainer = document.querySelector('.shop-ai-chat-messages');
-
-          // Add a message to indicate authentication is in progress
-          ShopAIChat.Message.add("Authentication in progress. Please complete the process in the popup window.",
-            'assistant', messagesContainer);
-
-          this.startTokenPolling(conversationId, messagesContainer);
-        }
-      },
-
-      /**
-       * Start polling for token availability
-       * @param {string} conversationId - Conversation ID
-       * @param {HTMLElement} messagesContainer - The messages container
-       */
-      startTokenPolling: function(conversationId, messagesContainer) {
-        if (!conversationId) return;
-
-        console.log('Starting token polling for conversation:', conversationId);
-        const pollingId = 'polling_' + Date.now();
-        sessionStorage.setItem('shopAiTokenPollingId', pollingId);
-
-        let attemptCount = 0;
-        const maxAttempts = 30;
-
-        const poll = async () => {
-          if (sessionStorage.getItem('shopAiTokenPollingId') !== pollingId) {
-            console.log('Another polling session has started, stopping this one');
-            return;
-          }
-
-          if (attemptCount >= maxAttempts) {
-            console.log('Max polling attempts reached, stopping');
-            return;
-          }
-
-          attemptCount++;
-
-          try {
-            const tokenUrl = 'https://localhost:3458/auth/token-status?conversation_id=' +
-              encodeURIComponent(conversationId);
-            const response = await fetch(tokenUrl);
-
-            if (!response.ok) {
-              throw new Error('Token status check failed: ' + response.status);
-            }
-
+          if (response.ok) {
             const data = await response.json();
-
-            if (data.status === 'authorized') {
-              console.log('Token available, resuming conversation');
-              const message = sessionStorage.getItem('shopAiLastMessage');
-
-              if (message) {
-                sessionStorage.removeItem('shopAiLastMessage');
-                setTimeout(() => {
-                  ShopAIChat.Message.add("Authorization successful! I'm now continuing with your request.",
-                    'assistant', messagesContainer);
-                  ShopAIChat.API.streamResponse(message, conversationId, messagesContainer);
-                  ShopAIChat.UI.showTypingIndicator();
-                }, 500);
-              }
-
-              sessionStorage.removeItem('shopAiTokenPollingId');
-              return;
-            }
-
-            console.log('Token not available yet, polling again in 10s');
-            setTimeout(poll, 10000);
-          } catch (error) {
-            console.error('Error polling for token status:', error);
-            setTimeout(poll, 10000);
+            return data.messages || [];
           }
-        };
-
-        setTimeout(poll, 2000);
+          return [];
+        } catch (error) {
+          console.error('Error fetching history:', error);
+          return [];
+        }
       }
     },
 
     /**
-     * Product-related functionality
+     * Product card creation
      */
     Product: {
-      /**
-       * Create a product card element
-       * @param {Object} product - Product data
-       * @returns {HTMLElement} Product card element
-       */
       createCard: function(product) {
         const card = document.createElement('div');
         card.classList.add('shop-ai-product-card');
 
-        // Create image container
-        const imageContainer = document.createElement('div');
-        imageContainer.classList.add('shop-ai-product-image');
+        const imageHtml = product.image_url
+          ? `<img src="${product.image_url}" alt="${product.title}" class="shop-ai-product-image">`
+          : '';
 
-        // Add product image or placeholder
-        const image = document.createElement('img');
-        image.src = product.image_url || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
-        image.alt = product.title;
-        image.onerror = function() {
-          // If image fails to load, use a fallback placeholder
-          this.src = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
-        };
-        imageContainer.appendChild(image);
-        card.appendChild(imageContainer);
-
-        // Add product info
-        const info = document.createElement('div');
-        info.classList.add('shop-ai-product-info');
-
-        // Add product title
-        const title = document.createElement('h3');
-        title.classList.add('shop-ai-product-title');
-        title.textContent = product.title;
-
-        // If product has a URL, make the title a link
-        if (product.url) {
-          const titleLink = document.createElement('a');
-          titleLink.href = product.url;
-          titleLink.target = '_blank';
-          titleLink.textContent = product.title;
-          title.textContent = '';
-          title.appendChild(titleLink);
-        }
-
-        info.appendChild(title);
-
-        // Add product price
-        const price = document.createElement('p');
-        price.classList.add('shop-ai-product-price');
-        price.textContent = product.price;
-        info.appendChild(price);
-
-        // Add add-to-cart button
-        const button = document.createElement('button');
-        button.classList.add('shop-ai-add-to-cart');
-        button.textContent = 'Add to Cart';
-        button.dataset.productId = product.id;
-
-        // Add click handler for the button
-        button.addEventListener('click', function() {
-          // Send message to add this product to cart
-          const input = document.querySelector('.shop-ai-chat-input input');
-          if (input) {
-            input.value = `Add ${product.title} to my cart`;
-            // Trigger a click on the send button
-            const sendButton = document.querySelector('.shop-ai-chat-send');
-            if (sendButton) {
-              sendButton.click();
-            }
-          }
-        });
-
-        info.appendChild(button);
-        card.appendChild(info);
+        card.innerHTML = `
+          <div class="shop-ai-product-content">
+            ${imageHtml}
+            <div class="shop-ai-product-info">
+              <h5 class="shop-ai-product-title">${product.title}</h5>
+              <p class="shop-ai-product-price">${product.price}</p>
+              <a href="${product.url}" class="shop-ai-product-link" target="_blank">View Product</a>
+            </div>
+          </div>
+        `;
 
         return card;
+      }
+    },
+
+    /**
+     * Formatting utilities
+     */
+    Formatting: {
+      formatMessageContent: function(messageElement) {
+        // Simple markdown-like formatting
+        let text = messageElement.dataset.rawText || '';
+        // Escape HTML
+        text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Bold
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        // Links
+        text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+        messageElement.innerHTML = text;
+      }
+    },
+
+    /**
+     * Auth handling
+     */
+    Auth: {
+      openAuthPopup: function(url) {
+        const popup = window.open(url, 'authPopup', 'width=600,height=700');
+        if (popup) {
+          const checkInterval = setInterval(() => {
+            if (popup.closed) {
+              clearInterval(checkInterval);
+              // Optionally reload or notify
+            }
+          }, 500);
+        }
       }
     },
 
@@ -905,28 +590,22 @@
      * Initialize the chat application
      */
     init: function() {
-      // Initialize UI
       const container = document.querySelector('.shop-ai-chat-container');
-      if (!container) return;
-
-      this.UI.init(container);
-
-      // Check for existing conversation
-      const conversationId = sessionStorage.getItem('shopAiConversationId');
-
-      if (conversationId) {
-        // Fetch conversation history
-        this.API.fetchChatHistory(conversationId, this.UI.elements.messagesContainer);
-      } else {
-        // No previous conversation, show welcome message
-        const welcomeMessage = window.shopChatConfig?.welcomeMessage || "👋 Hi there! How can I help you today?";
-        this.Message.add(welcomeMessage, 'assistant', this.UI.elements.messagesContainer);
+      if (container) {
+        this.UI.init(container);
+        // Pre-fetch conversation ID to ensure it's generated on load
+        this.Message.getConversationId();
       }
     }
   };
 
-  // Initialize the application when DOM is ready
-  document.addEventListener('DOMContentLoaded', function() {
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => ShopAIChat.init());
+  } else {
     ShopAIChat.init();
-  });
+  }
+
+  // Expose for debugging
+  window.ShopAIChat = ShopAIChat;
 })();
