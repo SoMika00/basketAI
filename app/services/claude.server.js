@@ -5,6 +5,7 @@
 import { Anthropic } from "@anthropic-ai/sdk";
 import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
+import { withRetry } from "../utils/retry.server.js";
 
 /**
  * Creates a Claude service instance
@@ -35,30 +36,32 @@ export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
     // Get system prompt from configuration or use default
     const systemInstruction = getSystemPrompt(promptType);
 
-    // Create stream
-    const stream = await anthropic.messages.stream({
-      model: AppConfig.api.defaultModel,
-      max_tokens: AppConfig.api.maxTokens,
-      system: systemInstruction,
-      messages,
-      tools: tools && tools.length > 0 ? tools : undefined
+    // Create stream with retry for transient errors
+    const finalMessage = await withRetry(async () => {
+      const stream = await anthropic.messages.stream({
+        model: AppConfig.api.defaultModel,
+        max_tokens: AppConfig.api.maxTokens,
+        system: systemInstruction,
+        messages,
+        tools: tools && tools.length > 0 ? tools : undefined
+      });
+
+      // Set up event handlers
+      if (streamHandlers.onText) {
+        stream.on('text', streamHandlers.onText);
+      }
+
+      if (streamHandlers.onMessage) {
+        stream.on('message', streamHandlers.onMessage);
+      }
+
+      if (streamHandlers.onContentBlock) {
+        stream.on('contentBlock', streamHandlers.onContentBlock);
+      }
+
+      // Wait for final message
+      return await stream.finalMessage();
     });
-
-    // Set up event handlers
-    if (streamHandlers.onText) {
-      stream.on('text', streamHandlers.onText);
-    }
-
-    if (streamHandlers.onMessage) {
-      stream.on('message', streamHandlers.onMessage);
-    }
-
-    if (streamHandlers.onContentBlock) {
-      stream.on('contentBlock', streamHandlers.onContentBlock);
-    }
-
-    // Wait for final message
-    const finalMessage = await stream.finalMessage();
 
     // Process tool use requests
     if (streamHandlers.onToolUse && finalMessage.content) {
