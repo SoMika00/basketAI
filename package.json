@@ -17,7 +17,8 @@
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "typecheck": "react-router typegen && tsc --noEmit"
+    "typecheck": "react-router typegen && tsc --noEmit",
+    "test": "vitest run --coverage"
   },
   "type": "module",
   "engines": {
@@ -58,7 +59,8 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "prettier": "^3.2.4",
     "typescript": "^5.2.2",
-    "vite": "^6.2.2"
+    "vite": "^6.2.2",
+    "vitest": "^2.1.9"
   },
   "workspaces": [
     "extensions/*"
