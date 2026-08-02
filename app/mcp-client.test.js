@@ -81,4 +81,31 @@ describe('MCPClient', () => {
   it('throws on unknown tool', async () => {
     await expect(client.callTool('unknown', {})).rejects.toThrow('Tool unknown not found');
   });
+
+  it('returns structured error on timeout for storefront tool', async () => {
+    const mockTools = [{ name: 'sf_tool', description: '', inputSchema: {} }];
+    fetch.mockResolvedValueOnce(createMockResponse({ tools: mockTools }));
+    await client.connectToStorefrontServer();
+
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    fetch.mockRejectedValueOnce(abortError);
+
+    await expect(client.callTool('sf_tool', {})).rejects.toThrow('Request timed out');
+  });
+
+  it('returns structured error on timeout for customer tool', async () => {
+    const mockTools = [{ name: 'cust_tool', description: '', inputSchema: {} }];
+    fetch.mockResolvedValueOnce(createMockResponse({ tools: mockTools }));
+    await client.connectToCustomerServer();
+
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    fetch.mockRejectedValueOnce(abortError);
+
+    const res = await client.callTool('cust_tool', {});
+    expect(res).toEqual({
+      error: { type: 'internal_error', data: expect.stringContaining('Error calling tool cust_tool') }
+    });
+  });
 });

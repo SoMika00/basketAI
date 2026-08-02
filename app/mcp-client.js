@@ -248,25 +248,42 @@ class MCPClient {
    * @throws {Error} If the request fails
    */
   async _makeJsonRpcRequest(endpoint, method, params, headers) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: method,
-        id: 1,
-        params: params
-      }),
-    });
+    const timeoutMs = parseInt(process.env.MCP_TOOL_TIMEOUT_MS || '30000', 10);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-      const error = await response.text();
-      const errorObj = new Error(`Request failed: ${response.status} ${error}`);
-      errorObj.status = response.status;
-      throw errorObj;
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: method,
+          id: 1,
+          params: params
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const error = await response.text();
+        const errorObj = new Error(`Request failed: ${response.status} ${error}`);
+        errorObj.status = response.status;
+        throw errorObj;
+      }
+
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        const timeoutError = new Error('Request timed out');
+        timeoutError.status = 408;
+        throw timeoutError;
+      }
+      throw error;
     }
-
-    return await response.json();
   }
 
   /**
