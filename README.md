@@ -37,7 +37,7 @@ This app consists of two main components:
 When you start the app, it will:
 - Start React Router in development mode.
 - Tunnel your local server so Shopify can reach it.
-- Provide a preview URL to install the app on your development store.
+- Provide a preview URL to install the app on the development store.
 
 For direct testing, point your test suite at the `/chat` endpoint (GET or POST for streaming).
 
@@ -51,6 +51,13 @@ For direct testing, point your test suite at the `/chat` endpoint (GET or POST f
 - **AI**: [Claude by Anthropic](https://www.anthropic.com/claude)
 - **Shopify Integration**: [@shopify/shopify-app-react-router](https://www.npmjs.com/package/@shopify/shopify-app-react-router)
 - **Database**: SQLite (via Prisma) for session storage
+
+## Environment Variables
+
+The following environment variables can be used to configure the application:
+
+- `MAX_LLM_TURNS`: Maximum number of LLM turns per chat request (default: 3)
+- `MAX_TOOL_CALLS`: Maximum number of tool calls per chat request (default: 8)
 
 ## Customizations
 This repo can be customized. You can:

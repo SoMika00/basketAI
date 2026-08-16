@@ -44,6 +44,10 @@ vi.mock('./config.server.js', () => ({
       maxTokens: 1024,
       defaultPromptType: 'standardAssistant',
     },
+    llm: {
+      maxLlmTurns: 3,
+      maxToolCalls: 8,
+    },
   },
 }));
 

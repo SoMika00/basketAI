@@ -1,32 +1,27 @@
 /**
- * Configuration Service
- * Centralizes all configuration values for the chat service
+ * App Configuration
+ * Centralized configuration loaded from environment variables with sensible defaults
  */
 
-export const AppConfig = {
-  // API Configuration
+const AppConfig = {
   api: {
-    defaultModel: 'claude-sonnet-4-20250514',
-    maxTokens: 2000,
-    defaultPromptType: 'standardAssistant',
+    defaultModel: process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022',
+    maxTokens: parseInt(process.env.MAX_TOKENS || '1024', 10),
+    defaultPromptType: process.env.DEFAULT_PROMPT_TYPE || 'standardAssistant',
   },
-
-  // Error Message Templates
-  errorMessages: {
-    missingMessage: "Message is required",
-    apiUnsupported: "This endpoint only supports server-sent events (SSE) requests or history requests.",
-    authFailed: "Authentication failed with Claude API",
-    apiKeyError: "Please check your API key in environment variables",
-    rateLimitExceeded: "Rate limit exceeded",
-    rateLimitDetails: "Please try again later",
-    genericError: "Failed to get response from Claude"
+  llm: {
+    maxLlmTurns: Number(process.env.MAX_LLM_TURNS || 3),
+    maxToolCalls: Number(process.env.MAX_TOOL_CALLS || 8),
   },
-
-  // Tool Configuration
   tools: {
-    productSearchName: "search_shop_catalog",
-    maxProductsToDisplay: 3
-  }
+    productSearchName: 'search_shop_catalog',
+    maxProductsToDisplay: parseInt(process.env.MAX_PRODUCTS_TO_DISPLAY || '3', 10),
+  },
+  errorMessages: {
+    missingMessage: 'Message is required',
+    apiUnsupported: 'This API endpoint only supports chat requests',
+    apiKeyError: 'API key is required',
+  },
 };
 
 export default AppConfig;

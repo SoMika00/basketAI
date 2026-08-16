@@ -123,8 +123,8 @@ async function handleChatSession({
   const llmService = createLlmService();
   const toolService = createToolService();
   const maxExchanges = Number(process.env.MAX_CHAT_EXCHANGES || 5);
-  const maxLlmTurns = Number(process.env.MAX_LLM_TURNS || 3);
-  const maxToolCalls = Number(process.env.MAX_TOOL_CALLS || 8);
+  const maxLlmTurns = AppConfig.llm.maxLlmTurns;
+  const maxToolCalls = AppConfig.llm.maxToolCalls;
   let llmTurns = 0;
   let toolCalls = 0;
 
@@ -386,25 +386,20 @@ function getCorsHeaders(request) {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": requestHeaders,
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Max-Age": "86400" // 24 hours
   };
 }
 
 /**
- * Get SSE headers for the response
+ * Gets SSE headers for the response
  * @param {Request} request - The request object
  * @returns {Object} SSE headers object
  */
 function getSseHeaders(request) {
   const origin = request.headers.get("Origin") || "*";
-
   return {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET,OPTIONS,POST",
-    "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
   };
 }
