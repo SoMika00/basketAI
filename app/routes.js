@@ -1,3 +1,1 @@
-import { flatRoutes } from "@react-router/fs-routes";
-
-export default flatRoutes();
+// Placeholder file for route definitions (currently empty)
