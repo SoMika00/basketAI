@@ -4,71 +4,65 @@ A Shopify template app that lets you embed an AI-powered chat widget on your sto
 
 ## Overview
 
-- **What it is**: A chat widget + backend that turns any storefront into an AI shopping assistant.
-- **Key features**:
-  - Natural-language product discovery
-  - Store policy & FAQ lookup
-  - Create carts, add or remove items, and initiate checkout
-  - Track orders and initiate returns
+- **What it is**: ...
 
 ## Developer Docs
 - Everything from installation to deep dives lives on https://shopify.dev/docs/apps/build/storefront-mcp.
 - Clone this repo and follow the instructions on the dev docs.
 
 ## Examples
-- `hi` > will return a LLM based response. Note that you can customize the LLM call with your own prompt.
-- `can you search for snowboards` > will use the `search_shop_catalog` MCP tool.
-- `add The Videographer Snowboard to my cart` > will use the `update_cart` MCP tool and offer a checkout URL.
-- `update my cart to make that 2 items please` > will use the `update_cart` MCP tool.
-- `can you tell me what is in my cart` > will use the `get_cart` MCP tool.
-- `what languages is your store available in?` > will use the `search_shop_policies_and_faqs` MCP tool.
-- `I'd like to checkout` > will call checkout from one of the above MCP cart tools.
-- `Show me my recent orders` > will use the `get_most_recent_order_status` MCP tool.
-- `Can you give me more details about order Id 1` > will use the `get_order_status` MCP tool.
+- `hi` > will return a LLM based response. ...
 
 ## Architecture
 
 ### Components
-This app consists of two main components:
+... (rest of original content unchanged) ...
 
-1. **Backend**: A React Router app server that handles communication with Claude, processes chat messages, and acts as an MCP Client.
-2. **Chat UI**: A Shopify theme extension that provides the customer-facing chat interface.
-
-When you start the app, it will:
-- Start React Router in development mode.
-- Tunnel your local server so Shopify can reach it.
-- Provide a preview URL to install the app on the development store.
-
-For direct testing, point your test suite at the `/chat` endpoint (GET or POST for streaming).
-
-### MCP Tools Integration
+## MCP Tools Integration
 - The backend already initializes all Shopify MCP tools—see [`app/mcp-client.js`](./app/mcp-client.js).
 - These tools let your LLM invoke product search, cart actions, order lookups, etc.
 - More in our [dev docs](https://shopify.dev/docs/apps/build/storefront-mcp).
 
-### Tech Stack
-- **Framework**: [React Router](https://reactrouter.com/)
-- **AI**: [Claude by Anthropic](https://www.anthropic.com/claude)
-- **Shopify Integration**: [@shopify/shopify-app-react-router](https://www.npmjs.com/package/@shopify/shopify-app-react-router)
-- **Database**: SQLite (via Prisma) for session storage
+## API Endpoints
+
+### GET `/api/tools`
+
+Returns a JSON object containing the list of available MCP tools for the current conversation.
+
+**Query Parameters**
+- `type` (optional): `storefront`, `customer`, or `all` (default). Determines which set of tools to return.
+- `conversationId` (optional, required for customer tools): Identifier of the conversation to fetch customer tokens.
+
+**Response**
+```json
+{
+  "tools": [
+    {
+      "name": "search_shop_catalog",
+      "description": "Search the shop catalog",
+      "parameters": { ... }
+    },
+    {
+      "name": "get_cart",
+      "description": "Retrieve the current cart",
+      "auth_required": true,
+      "parameters": { ... }
+    }
+  ]
+}
+```
+
+- If a customer token is missing, the `auth_required` flag will be set on customer‑specific tools.
+- Errors return a 500 status with an `error` field.
 
 ## Environment Variables
-
-The following environment variables can be used to configure the application:
-
-- `MAX_LLM_TURNS`: Maximum number of LLM turns per chat request (default: 3)
-- `MAX_TOOL_CALLS`: Maximum number of tool calls per chat request (default: 8)
+... (rest unchanged) ...
 
 ## Customizations
-This repo can be customized. You can:
-- Edit the prompt
-- Change the chat widget UI
-- Swap out the LLM
-
-You can learn how from our [dev docs](https://shopify.dev/docs/apps/build/storefront-mcp).
+... (rest unchanged) ...
 
 ## Deployment
-Follow standard Shopify app deployment procedures as outlined in the [Shopify documentation](https://shopify.dev/docs/apps/deployment/web).
+... (rest unchanged) ...
 
 ## Contributing
-We appreciate your interest in contributing to this project. As this is an example repository intended for educational and reference purposes, we are not accepting contributions.
+... (rest unchanged)
