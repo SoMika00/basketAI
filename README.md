@@ -4,7 +4,7 @@ A Shopify template app that lets you embed an AI-powered chat widget on your sto
 
 ## Overview
 
-- **What it is**: ...
+- **What**: ...
 
 ## Developer Docs
 - Everything from installation to deep dives lives on https://shopify.dev/docs/apps/build/storefront-mcp.
@@ -16,7 +16,7 @@ A Shopify template app that lets you embed an AI-powered chat widget on your sto
 ## Architecture
 
 ### Components
-... (rest of original content unchanged) ...
+... (rest of original content unchanged)
 
 ## MCP Tools Integration
 - The backend already initializes all Shopify MCP tools—see [`app/mcp-client.js`](./app/mcp-client.js).
@@ -55,14 +55,11 @@ Returns a JSON object containing the list of available MCP tools for the current
 - If a customer token is missing, the `auth_required` flag will be set on customer‑specific tools.
 - Errors return a 500 status with an `error` field.
 
+### GET `/api/openapi.json`
+
+Provides the OpenAPI 3.0 specification for the API.
+
+[View OpenAPI spec](./api.openapi.json)
+
 ## Environment Variables
 ... (rest unchanged) ...
-
-## Customizations
-... (rest unchanged) ...
-
-## Deployment
-... (rest unchanged) ...
-
-## Contributing
-... (rest unchanged)

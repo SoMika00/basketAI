@@ -1,26 +1,22 @@
-import { createRoutesFromElements, Route } from "@remix-run/react";
-import { createBrowserRouter } from "react-router-dom";
-import { rootRoute } from "./root.jsx";
-import { chatRoute } from "./routes/chat.jsx";
-import { indexRoute } from "./routes/_index/route.jsx";
-import { appRoute } from "./routes/app.jsx";
-import { authCallbackRoute } from "./routes/auth.callback.jsx";
-import { authTokenStatusRoute } from "./routes/auth.token-status.jsx";
-import { authDynamicRoute } from "./routes/auth.$.jsx";
-import { webhooksRoute } from "./routes/api.webhooks.jsx";
-import { toolsRoute } from "./routes/api.tools.jsx";
+import { createBrowserRouter, RouterProvider } from "@react-router-dom";
+import { routes as appRoutes } from "./routes";
 
-export const router = createBrowserRouter(
-  createRoutesFromElements(
-    <Route path="/" element={rootRoute}>
-      <Route index element={indexRoute} />
-      <Route path="chat" element={chatRoute} />
-      <Route path="app" element={appRoute} />
-      <Route path="auth" element={authDynamicRoute} />
-      <Route path="auth/callback" element={authCallbackRoute} />
-      <Route path="auth/token-status" element={authTokenStatusRoute} />
-      <Route path="api/webhooks" element={webhooksRoute} />
-      <Route path="api/tools" element={toolsRoute} />
-    </Route>
-  )
-);
+// Existing route definitions are imported from ./routes which uses file system based routing.
+// To expose the OpenAPI spec at /api/openapi.json, we add a manual route entry.
+
+export const router = createBrowserRouter([
+  ...appRoutes,
+  {
+    path: "/api/openapi.json",
+    element: null, // No React component needed for API route
+    loader: async ({ request }) => {
+      // Dynamically import the loader from the new route file
+      const { loader } = await import("./routes/api.openapi.jsx");
+      return loader({ request });
+    },
+  },
+]);
+
+export default function AppRouter() {
+  return <RouterProvider router={router} />;
+}
