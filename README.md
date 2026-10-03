@@ -55,6 +55,22 @@ Returns a JSON object containing the list of available MCP tools for the current
 - If a customer token is missing, the `auth_required` flag will be set on customer‑specific tools.
 - Errors return a 500 status with an `error` field.
 
+### GET `/api/conversation/:conversationId`
+
+Returns a summary of the specified conversation.
+
+**Response**
+```json
+{
+  "conversation_id": "123",
+  "message_count": 42,
+  "last_message_at": "2023-01-01T12:34:56.789Z",
+  "token_status": "authorized"
+}
+```
+- `token_status` is either `authorized` (customer token exists) or `unauthorized`.
+- Errors return a 400 for missing/invalid `conversationId` or 500 for server errors.
+
 ### GET `/api/openapi.json`
 
 Provides the OpenAPI 3.0 specification for the API.
