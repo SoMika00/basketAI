@@ -71,6 +71,23 @@ Returns a summary of the specified conversation.
 - `token_status` is either `authorized` (customer token exists) or `unauthorized`.
 - Errors return a 400 for missing/invalid `conversationId` or 500 for server errors.
 
+### DELETE `/api/conversation/:conversationId`
+
+Clears a conversation's stored history server-side. Deletes the `Conversation` row (cascading to its `Message` rows) and any associated `CustomerToken` and `CustomerAccountUrls` rows for that conversation.
+
+**Response**
+```json
+{
+  "conversation_id": "123",
+  "deleted": true,
+  "messages_deleted": 42
+}
+```
+- Deleting a conversation that does not exist returns `200` with `deleted: false` and `messages_deleted: 0` (idempotent).
+- Missing `conversationId` returns a `400` with an `error` field.
+- Server errors return a `500` with an `error` field.
+- `OPTIONS` preflight returns `204` with CORS headers allowing `DELETE`.
+
 ### GET `/api/openapi.json`
 
 Provides the OpenAPI 3.0 specification for the API.

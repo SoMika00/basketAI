@@ -81,6 +81,125 @@ export async function loader() {
           },
         },
       },
+      "/api/conversation/{conversationId}": {
+        get: {
+          summary: "Get conversation summary",
+          description: "Returns a summary of the specified conversation.",
+          parameters: [
+            {
+              name: "conversationId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Successful response with conversation summary",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      conversation_id: { type: "string" },
+                      message_count: { type: "integer" },
+                      last_message_at: { type: "string", format: "date-time" },
+                      token_status: { type: "string", enum: ["authorized", "unauthorized"] },
+                    },
+                    required: ["conversation_id", "message_count", "token_status"],
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Missing or invalid conversationId",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      error: { type: "string" },
+                    },
+                    required: ["error"],
+                  },
+                },
+              },
+            },
+            "500": {
+              description: "Internal server error",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      error: { type: "string" },
+                    },
+                    required: ["error"],
+                  },
+                },
+              },
+            },
+          },
+        },
+        delete: {
+          summary: "Clear a conversation's history",
+          description: "Deletes the conversation, its messages, and any associated customer auth state.",
+          parameters: [
+            {
+              name: "conversationId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Successful deletion (idempotent)",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      conversation_id: { type: "string" },
+                      deleted: { type: "boolean" },
+                      messages_deleted: { type: "integer" },
+                    },
+                    required: ["conversation_id", "deleted", "messages_deleted"],
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Missing conversationId",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      error: { type: "string" },
+                    },
+                    required: ["error"],
+                  },
+                },
+              },
+            },
+            "500": {
+              description: "Internal server error",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      error: { type: "string" },
+                    },
+                    required: ["error"],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   };
 
