@@ -8,6 +8,7 @@ import AppConfig from "../services/config.server";
 import { createSseStream } from "../services/streaming.server";
 import { createLlmService } from "../services/llm.server";
 import { createToolService } from "../services/tool.server";
+import { check as checkRateLimit } from "../services/rate-limit.server";
 
 
 /**
@@ -58,6 +59,38 @@ async function handleHistoryRequest(request, conversationId) {
 }
 
 /**
+ * Derives the rate-limit key for a request.
+ * Prefers the conversation_id from the request body, falling back to the
+ * client IP from common proxy headers.
+ *
+ * @param {Request} request - The request object
+ * @param {Object} body - Parsed request body
+ * @returns {string} The rate-limit key
+ */
+function getRateLimitKey(request, body) {
+  if (body && body.conversation_id) {
+    return `conversation:${body.conversation_id}`;
+  }
+
+  const forwardedFor = request.headers.get("X-Forwarded-For");
+  if (forwardedFor) {
+    return `ip:${forwardedFor.split(",")[0].trim()}`;
+  }
+
+  const realIp = request.headers.get("X-Real-IP");
+  if (realIp) {
+    return `ip:${realIp.trim()}`;
+  }
+
+  const cfIp = request.headers.get("CF-Connecting-IP");
+  if (cfIp) {
+    return `ip:${cfIp.trim()}`;
+  }
+
+  return "ip:unknown";
+}
+
+/**
  * Handle chat requests (both GET and POST)
  * @param {Request} request - The request object
  * @returns {Response} Server-sent events stream
@@ -73,6 +106,26 @@ async function handleChatRequest(request) {
       return new Response(
         JSON.stringify({ error: AppConfig.errorMessages.missingMessage }),
         { status: 400, headers: getSseHeaders(request) }
+      );
+    }
+
+    // Enforce per-conversation/IP rate limit before creating the SSE stream
+    const rateLimitKey = getRateLimitKey(request, body);
+    const rateLimitResult = checkRateLimit(rateLimitKey);
+    if (!rateLimitResult.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: "rate_limit_exceeded",
+          retry_after_seconds: rateLimitResult.retry_after_seconds,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...getCorsHeaders(request),
+            "Content-Type": "application/json",
+            "Retry-After": String(rateLimitResult.retry_after_seconds),
+          },
+        }
       );
     }
 
@@ -385,7 +438,7 @@ function getCorsHeaders(request) {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": requestHeaders,
-    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Max-Age": "86400",
   };
 }
 
@@ -395,11 +448,10 @@ function getCorsHeaders(request) {
  * @returns {Object} SSE headers object
  */
 function getSseHeaders(request) {
-  const origin = request.headers.get("Origin") || "*";
   return {
+    ...getCorsHeaders(request),
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
-    "Access-Control-Allow-Origin": origin,
   };
 }
