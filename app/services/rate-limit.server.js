@@ -101,16 +101,52 @@ function getRateLimitStatus(key) {
 }
 
 /**
+ * Derives the rate-limit key for a request.
+ *
+ * When a conversationId is provided it is used directly (prefixed with
+ * `conversation:`). Otherwise the key is derived from common proxy IP headers
+ * (`X-Forwarded-For` first hop, then `X-Real-IP`, then `CF-Connecting-IP`),
+ * falling back to `ip:unknown`.
+ *
+ * @param {Request} request - The request object
+ * @param {string} [conversationId] - Optional conversation identifier
+ * @returns {string} The rate-limit key
+ */
+function deriveRateLimitKey(request, conversationId) {
+  if (conversationId) {
+    return `conversation:${conversationId}`;
+  }
+
+  const forwardedFor = request.headers.get("X-Forwarded-For");
+  if (forwardedFor) {
+    return `ip:${forwardedFor.split(",")[0].trim()}`;
+  }
+
+  const realIp = request.headers.get("X-Real-IP");
+  if (realIp) {
+    return `ip:${realIp.trim()}`;
+  }
+
+  const cfIp = request.headers.get("CF-Connecting-IP");
+  if (cfIp) {
+    return `ip:${cfIp.trim()}`;
+  }
+
+  return "ip:unknown";
+}
+
+/**
  * Clears all recorded request timestamps. Intended for tests.
  */
 function resetRateLimiter() {
   buckets = new Map();
 }
 
-export { check, getRateLimitStatus, resetRateLimiter };
+export { check, getRateLimitStatus, resetRateLimiter, deriveRateLimitKey };
 
 export default {
   check,
   getRateLimitStatus,
   resetRateLimiter,
+  deriveRateLimitKey,
 };
