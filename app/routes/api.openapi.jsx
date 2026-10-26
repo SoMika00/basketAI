@@ -22,6 +22,51 @@ const openapi = {
     description: "Public API for the storefront chat agent.",
   },
   paths: {
+    "/api/rate-limit": {
+      get: {
+        summary: "Get current chat rate-limit status",
+        parameters: [
+          {
+            name: "conversationId",
+            in: "query",
+            required: false,
+            description: "Conversation identifier. When omitted, the key is derived from the client IP headers.",
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Rate-limit status",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    key: { type: "string" },
+                    count: { type: "integer" },
+                    max: { type: "integer" },
+                    window_ms: { type: "integer" },
+                    remaining: { type: "integer" },
+                    retry_after_seconds: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+          "500": {
+            description: "Server error",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { error: { type: "string" } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/tools": {
       get: {
         summary: "List available MCP tools",

@@ -25,6 +25,28 @@ A Shopify template app that lets you embed an AI-powered chat widget on your sto
 
 ## API Endpoints
 
+### GET `/api/rate-limit`
+
+Returns the current chat rate-limit status for a conversation or client IP without consuming a rate-limit slot.
+
+**Query Parameters**
+- `conversationId` (optional): Identifier of the conversation. When provided, the key is `conversation:<id>`. When omitted, the key is derived from `X-Forwarded-For` / `X-Real-IP` / `CF-Connecting-IP` headers, falling back to `ip:unknown`.
+
+**Response**
+```json
+{
+  "key": "conversation:123",
+  "count": 5,
+  "max": 20,
+  "window_ms": 60000,
+  "remaining": 15,
+  "retry_after_seconds": 0
+}
+```
+- `retry_after_seconds` is `0` when `remaining > 0`, otherwise it is the number of seconds until the next slot frees up.
+- Errors return a 500 status with an `error` field.
+- `OPTIONS` preflight returns `204` with CORS headers allowing `GET`.
+
 ### GET `/api/tools`
 
 Returns a JSON object containing the list of available MCP tools for the current conversation.

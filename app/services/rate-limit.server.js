@@ -101,6 +101,31 @@ function getRateLimitStatus(key) {
 }
 
 /**
+ * Computes the number of seconds until a rate-limit slot frees up for a key.
+ *
+ * Returns 0 when the key still has remaining capacity. When the limit is
+ * exhausted, the value is derived from the oldest timestamp in the current
+ * window (the same math used by `check`).
+ *
+ * @param {string} key - The rate-limit key
+ * @returns {number} Seconds until the next slot frees up (0 when not exhausted)
+ */
+function getRetryAfterSeconds(key) {
+  const max = getMax();
+  const windowMs = getWindowMs();
+  const now = Date.now();
+  const timestamps = prune(buckets.get(key) || [], now, windowMs);
+
+  if (timestamps.length < max) {
+    return 0;
+  }
+
+  const oldest = timestamps[0];
+  const retryAfterMs = Math.max(0, oldest + windowMs - now);
+  return Math.ceil(retryAfterMs / 1000);
+}
+
+/**
  * Derives the rate-limit key for a request.
  *
  * When a conversationId is provided it is used directly (prefixed with
@@ -142,11 +167,18 @@ function resetRateLimiter() {
   buckets = new Map();
 }
 
-export { check, getRateLimitStatus, resetRateLimiter, deriveRateLimitKey };
+export {
+  check,
+  getRateLimitStatus,
+  getRetryAfterSeconds,
+  resetRateLimiter,
+  deriveRateLimitKey,
+};
 
 export default {
   check,
   getRateLimitStatus,
+  getRetryAfterSeconds,
   resetRateLimiter,
   deriveRateLimitKey,
 };
