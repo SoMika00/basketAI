@@ -1,8 +1,6 @@
 /*
  * API route for exporting a conversation transcript.
  * GET /api/conversation/:conversationId/export
- * GET /api/conversation/:conversationId/export.json
- * GET /api/conversation/:conversationId/export.csv
  */
 import { json } from "@remix-run/node";
 import { getConversationHistory } from "../db.server";
@@ -29,11 +27,11 @@ export async function loader({ request, params }) {
     return new Response(null, { status: 204, headers: corsHeaders(request) });
   }
 
-  const conversationId = params.conversationId;
+  const { conversationId } = params;
 
   if (!conversationId) {
     return json(
-      { error: "conversationId is required" },
+      { error: "Missing conversationId parameter" },
       { status: 400, headers: corsHeaders(request) }
     );
   }
@@ -41,46 +39,18 @@ export async function loader({ request, params }) {
   try {
     const messages = await getConversationHistory(conversationId);
 
-    const url = new URL(request.url);
-    const format = url.pathname.endsWith(".csv")
-      ? "csv"
-      : url.pathname.endsWith(".json")
-        ? "json"
-        : "json";
+    const payload = {
+      conversation_id: conversationId,
+      exported_at: new Date().toISOString(),
+      messages: messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        created_at: new Date(message.createdAt).toISOString(),
+      })),
+    };
 
-    if (format === "csv") {
-      const header = "role,content\n";
-      const rows = messages
-        .map((m) => {
-          const content = (m.content || "").replace(/"/g, '""');
-          return `"${m.role}","${content}"`;
-        })
-        .join("\n");
-
-      return new Response(header + rows, {
-        status: 200,
-        headers: {
-          ...corsHeaders(request),
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="conversation-${conversationId}.csv"`,
-        },
-      });
-    }
-
-    return json(
-      {
-        conversation_id: conversationId,
-        message_count: messages.length,
-        messages,
-      },
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders(request),
-          "Content-Disposition": `attachment; filename="conversation-${conversationId}.json"`,
-        },
-      }
-    );
+    return json(payload, { status: 200, headers: corsHeaders(request) });
   } catch (error) {
     console.error("Error exporting conversation:", error);
     return json(
@@ -90,7 +60,7 @@ export async function loader({ request, params }) {
   }
 }
 
-export default function ExportRoute() {
+export default function ConversationExportRoute() {
   // This route is API only; no UI component needed.
   return null;
 }
