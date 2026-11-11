@@ -23,6 +23,10 @@ A Shopify template app that lets you embed an AI-powered chat widget on your sto
 - These tools let your LLM invoke product search, cart actions, order lookups, etc.
 - More in our [dev docs](https://shopify.dev/docs/apps/build/storefront-mcp).
 
+## API Documentation UI
+
+Interactive API documentation is available at [`/api-docs`](/api-docs). It renders the OpenAPI spec from [`/api/openapi.json`](/api/openapi.json) using Swagger UI, so you can explore and test the app's endpoints directly in the browser.
+
 ## API Endpoints
 
 ### GET `/api/rate-limit`
