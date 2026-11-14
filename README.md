@@ -114,6 +114,21 @@ Clears a conversation's stored history server-side. Deletes the `Conversation` r
 - Server errors return a `500` with an `error` field.
 - `OPTIONS` preflight returns `204` with CORS headers allowing `DELETE`.
 
+### GET `/api/conversation/:conversationId/export.html`
+
+Exports a conversation transcript as a self-contained HTML file (inline styles, no external assets) that can be shared or archived in a browser.
+
+**Query Parameters**
+- `download` (optional): Set to `1` to add a `Content-Disposition: attachment` header that forces a download. Without it, the HTML is served inline.
+
+**Response**
+- `200` with `Content-Type: text/html; charset=utf-8` and a valid HTML document containing the conversation id, message count, generated timestamp, and all messages in chronological order.
+- Message content and the conversation id are HTML-escaped to prevent XSS.
+- Tool-result-only messages are labeled as tool output rather than rendered as raw JSON.
+- Missing or empty `conversationId` returns a `400` with a JSON `error` field.
+- Server errors return a `500` with a JSON `error` field.
+- `OPTIONS` preflight returns `204` with CORS headers allowing `GET`.
+
 ### GET `/api/openapi.json`
 
 Provides the OpenAPI 3.0 specification for the API.
