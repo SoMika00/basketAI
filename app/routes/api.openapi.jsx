@@ -338,6 +338,58 @@ const openapi = {
         },
       },
     },
+    "/api/conversation/{conversationId}/export.xml": {
+      get: {
+        summary: "Export a conversation transcript as an XML document",
+        parameters: [
+          {
+            name: "conversationId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+          {
+            name: "download",
+            in: "query",
+            required: false,
+            description: "When set to 1, adds a Content-Disposition attachment header to force a download.",
+            schema: { type: "string", enum: ["1"] },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "XML transcript",
+            content: {
+              "application/xml": {
+                schema: { type: "string" },
+              },
+            },
+          },
+          "400": {
+            description: "Missing or empty conversationId",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { error: { type: "string" } },
+                },
+              },
+            },
+          },
+          "500": {
+            description: "Server error",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { error: { type: "string" } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 };
 
