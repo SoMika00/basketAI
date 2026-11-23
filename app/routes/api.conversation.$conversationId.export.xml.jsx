@@ -4,9 +4,11 @@
  */
 import { json } from "@remix-run/node";
 import { getConversationHistory } from "../db.server";
+import { buildContentDisposition } from "../utils/download.server";
 
 /**
  * Helper to generate CORS headers consistent with other API routes.
+ * Exposes Content-Disposition so browser fetch() clients can read the filename.
  */
 function corsHeaders(request) {
   const origin = request.headers.get("Origin") || "*";
@@ -14,16 +16,16 @@ function corsHeaders(request) {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Accept",
+    "Access-Control-Expose-Headers": "Content-Disposition",
     "Access-Control-Max-Age": "86400",
   };
 }
 
 /**
- * Escapes a value for safe inclusion in XML text content or attribute values.
- * Escapes &, <, >, ", and '.
+ * Escapes a string for safe inclusion in XML text content.
  *
- * @param {string} value - The raw value to escape
- * @returns {string} The XML-escaped value
+ * @param {string} value - The raw string value
+ * @returns {string} The XML-escaped string
  */
 function escapeXml(value) {
   return String(value ?? "")
@@ -35,32 +37,31 @@ function escapeXml(value) {
 }
 
 /**
- * Builds the XML transcript document.
+ * Builds an XML document from the conversation messages.
  *
  * @param {string} conversationId - The conversation identifier
- * @param {Array} messages - Chronologically ordered messages
- * @returns {string} The XML document
+ * @param {Array} messages - The conversation messages
+ * @returns {string} The XML document string
  */
 function buildXml(conversationId, messages) {
-  const generatedAt = new Date().toISOString();
-  const lines = [];
-
-  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
-  lines.push(
-    `<conversation id="${escapeXml(conversationId)}" message_count="${messages.length}" generated_at="${escapeXml(generatedAt)}">`
-  );
+  const lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    "<conversation>",
+    `  <id>${escapeXml(conversationId)}</id>`,
+    `  <message_count>${messages.length}</message_count>`,
+    `  <generated_at>${escapeXml(new Date().toISOString())}</generated_at>`,
+    "  <messages>",
+  ];
 
   for (const message of messages) {
-    const id = escapeXml(message.id);
-    const role = escapeXml(message.role);
-    const createdAt = escapeXml(new Date(message.createdAt).toISOString());
-    const content = escapeXml(message.content);
-
-    lines.push(
-      `  <message id="${id}" role="${role}" created_at="${createdAt}">${content}</message>`
-    );
+    lines.push("    <message>");
+    lines.push(`      <role>${escapeXml(message.role)}</role>`);
+    lines.push(`      <content>${escapeXml(message.content)}</content>`);
+    lines.push(`      <created_at>${escapeXml(new Date(message.createdAt).toISOString())}</created_at>`);
+    lines.push("    </message>");
   }
 
+  lines.push("  </messages>");
   lines.push("</conversation>");
 
   return lines.join("\n");
@@ -88,10 +89,8 @@ export async function loader({ request, params }) {
     const url = new URL(request.url);
     const download = url.searchParams.get("download") === "1";
 
-    // Fetch all messages for the conversation in chronological order.
     const messages = await getConversationHistory(conversationId);
-
-    const xml = buildXml(conversationId, messages);
+    const body = buildXml(conversationId, messages);
 
     const headers = {
       ...corsHeaders(request),
@@ -99,14 +98,14 @@ export async function loader({ request, params }) {
     };
 
     if (download) {
-      headers["Content-Disposition"] = `attachment; filename="conversation-${conversationId}.xml"`;
+      headers["Content-Disposition"] = buildContentDisposition(conversationId, "xml");
     }
 
-    return new Response(xml, { status: 200, headers });
+    return new Response(body, { status: 200, headers });
   } catch (error) {
     console.error("Error exporting conversation XML:", error);
     return json(
-      { error: "Failed to export conversation transcript" },
+      { error: "Failed to export conversation" },
       { status: 500, headers: corsHeaders(request) }
     );
   }
